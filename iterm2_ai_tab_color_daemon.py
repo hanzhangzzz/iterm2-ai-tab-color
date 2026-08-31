@@ -75,6 +75,8 @@ FAST_EXIT_CHECK_INTERVAL = 1.0
 MIN_STATE_AGE_SEC = 10
 # state 文件最大存活时间：启动时超过此时长的 state 视为无人认领的化石，直接清理。
 STALE_STATE_MAX_AGE_SEC = 24 * 3600
+# 心跳间隔：watch 循环定期打点，让"进程活着但循环已死"在日志里可见。
+HEARTBEAT_INTERVAL_SEC = 3600
 
 COLOR_GREEN  = iterm2.Color(CFG["COLOR_GREEN_R"],  CFG["COLOR_GREEN_G"],  CFG["COLOR_GREEN_B"])
 COLOR_YELLOW = iterm2.Color(CFG["COLOR_YELLOW_R"], CFG["COLOR_YELLOW_G"], CFG["COLOR_YELLOW_B"])
@@ -100,6 +102,10 @@ AGENT_PROCESS_MARKERS = {
 def log(msg: str):
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
     print(f"[iterm2-ai-tab-color] {ts}  {msg}", flush=True)
+
+
+def log_heartbeat(tracked: int):
+    log(f"心跳: watch 存活，跟踪 {tracked} 个 state")
 
 
 def extract_uuid(iterm2_session_id: str) -> str:
@@ -639,6 +645,7 @@ async def watch_idle_dir(connection):
     known: dict[str, dict] = {}
     applied_colors: dict = {}
     last_exit_check = 0.0
+    last_heartbeat = 0.0
 
     # 启动清理：丢弃陈旧化石文件，避免假死期间堆积的 state 参与恢复
     purge_stale_state_files()
@@ -665,6 +672,10 @@ async def watch_idle_dir(connection):
             current = read_state_files()
 
             now = time.monotonic()
+            if now - last_heartbeat >= HEARTBEAT_INTERVAL_SEC:
+                log_heartbeat(len(current))
+                last_heartbeat = now
+
             app = None
             if now - last_exit_check >= FAST_EXIT_CHECK_INTERVAL:
                 app = await iterm2.async_get_app(connection)

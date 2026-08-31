@@ -1234,6 +1234,54 @@ class TestMainExitsWithLoops(unittest.TestCase):
 
 
 # ================================================================== #
+#  心跳 — 让"进程活着但循环已死"在日志里可见
+# ================================================================== #
+
+class TestHeartbeat(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_log_heartbeat_reports_tracked_count(self):
+        with patch.object(daemon, "log") as mock_log:
+            daemon.log_heartbeat(3)
+        self.assertIn("3", mock_log.call_args[0][0])
+
+    def _run_watch_for(self, seconds, logs):
+        """真实跑 watch_idle_dir 若干秒后取消，收集日志。"""
+        async def runner():
+            task = asyncio.create_task(daemon.watch_idle_dir(MagicMock()))
+            await asyncio.sleep(seconds)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        with patch.object(daemon, "IDLE_STATE_DIR", Path(self.tmpdir)), \
+             patch.object(daemon, "log", side_effect=lambda m: logs.append(m)), \
+             patch.object(daemon.iterm2, "async_get_app", AsyncMock()), \
+             patch.object(daemon, "_apply_all_colors", AsyncMock()), \
+             patch.object(daemon, "reset_untracked_tab_colors", AsyncMock()):
+            asyncio.run(runner())
+
+    def test_watch_emits_heartbeat_on_startup(self):
+        logs = []
+        self._run_watch_for(0.7, logs)
+        self.assertEqual(len([m for m in logs if "心跳" in m]), 1)
+
+    def test_watch_does_not_repeat_heartbeat_within_interval(self):
+        """间隔未到不应重复打点，否则日志会被心跳淹没。"""
+        logs = []
+        self._run_watch_for(1.7, logs)  # 循环 ~3 轮
+        self.assertEqual(len([m for m in logs if "心跳" in m]), 1)
+
+
+# ================================================================== #
 #  运行
 # ================================================================== #
 
