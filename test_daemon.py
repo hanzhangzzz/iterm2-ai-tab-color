@@ -7,6 +7,7 @@ iterm2_ai_tab_color_daemon.py 纯逻辑测试
        resume 场景、watch/poller 决策逻辑。
 """
 
+import asyncio
 import json
 import os
 import subprocess
@@ -1101,6 +1102,135 @@ class TestDaemonEntrypoint(unittest.TestCase):
             daemon.run_daemon()
 
         run_forever.assert_called_once_with(daemon.main, retry=True)
+
+
+# ================================================================== #
+#  purge_stale_state_files — 启动时清理化石文件
+# ================================================================== #
+
+class TestPurgeStaleStateFiles(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _write(self, name, data):
+        path = Path(self.tmpdir) / name
+        path.write_text(json.dumps(data))
+        return path
+
+    def test_removes_state_older_than_max_age(self):
+        old = self._write("old.json", {
+            "iterm2_session": "w0t0p0:OLD",
+            "idle_since": time.time() - daemon.STALE_STATE_MAX_AGE_SEC - 60,
+        })
+        with patch.object(daemon, "IDLE_STATE_DIR", Path(self.tmpdir)):
+            removed = daemon.purge_stale_state_files()
+        self.assertEqual(removed, 1)
+        self.assertFalse(old.exists())
+
+    def test_keeps_fresh_state(self):
+        fresh = self._write("fresh.json", {
+            "iterm2_session": "w0t0p0:NEW",
+            "idle_since": time.time() - 60,
+        })
+        with patch.object(daemon, "IDLE_STATE_DIR", Path(self.tmpdir)):
+            removed = daemon.purge_stale_state_files()
+        self.assertEqual(removed, 0)
+        self.assertTrue(fresh.exists())
+
+    def test_falls_back_to_mtime_when_idle_since_missing(self):
+        no_field = self._write("nofield.json", {"iterm2_session": "w0t0p0:X"})
+        stale_mtime = time.time() - daemon.STALE_STATE_MAX_AGE_SEC - 60
+        os.utime(no_field, (stale_mtime, stale_mtime))
+        with patch.object(daemon, "IDLE_STATE_DIR", Path(self.tmpdir)):
+            removed = daemon.purge_stale_state_files()
+        self.assertEqual(removed, 1)
+        self.assertFalse(no_field.exists())
+
+    def test_removes_corrupt_old_file(self):
+        broken = Path(self.tmpdir) / "broken.json"
+        broken.write_text("{not json")
+        stale_mtime = time.time() - daemon.STALE_STATE_MAX_AGE_SEC - 60
+        os.utime(broken, (stale_mtime, stale_mtime))
+        with patch.object(daemon, "IDLE_STATE_DIR", Path(self.tmpdir)):
+            removed = daemon.purge_stale_state_files()
+        self.assertEqual(removed, 1)
+        self.assertFalse(broken.exists())
+
+    def test_keeps_corrupt_recent_file(self):
+        """损坏但很新的文件可能是写入中途，不删。"""
+        broken = Path(self.tmpdir) / "broken.json"
+        broken.write_text("{not json")
+        with patch.object(daemon, "IDLE_STATE_DIR", Path(self.tmpdir)):
+            removed = daemon.purge_stale_state_files()
+        self.assertEqual(removed, 0)
+        self.assertTrue(broken.exists())
+
+    def test_nonexistent_dir_is_noop(self):
+        with patch.object(daemon, "IDLE_STATE_DIR", Path("/nonexistent/xyz")):
+            self.assertEqual(daemon.purge_stale_state_files(), 0)
+
+
+# ================================================================== #
+#  main — 任一循环退出即整体退出
+# ================================================================== #
+
+class TestMainExitsWithLoops(unittest.TestCase):
+    """回归测试：曾经 main 挂 Event().wait()，两循环 return 后进程假死。"""
+
+    def _run_main(self, watch_impl, poll_impl):
+        with patch.object(daemon, "watch_idle_dir", watch_impl), \
+             patch.object(daemon, "color_poller", poll_impl):
+            return asyncio.run(daemon.main(MagicMock()))
+
+    def test_returns_when_watch_loop_exits(self):
+        async def watch(connection):
+            return None
+
+        async def poll(connection):
+            await asyncio.sleep(3600)
+
+        # 不挂起即为通过；超时会让测试卡死
+        self._run_main(watch, poll)
+
+    def test_returns_when_poller_exits(self):
+        async def watch(connection):
+            await asyncio.sleep(3600)
+
+        async def poll(connection):
+            return None
+
+        self._run_main(watch, poll)
+
+    def test_cancels_the_surviving_loop(self):
+        cancelled = {"watch": False}
+
+        async def watch(connection):
+            try:
+                await asyncio.sleep(3600)
+            except asyncio.CancelledError:
+                cancelled["watch"] = True
+                raise
+
+        async def poll(connection):
+            return None
+
+        self._run_main(watch, poll)
+        self.assertTrue(cancelled["watch"])
+
+    def test_propagates_loop_exception(self):
+        async def watch(connection):
+            raise RuntimeError("websocket died")
+
+        async def poll(connection):
+            await asyncio.sleep(3600)
+
+        with self.assertRaises(RuntimeError):
+            self._run_main(watch, poll)
 
 
 # ================================================================== #

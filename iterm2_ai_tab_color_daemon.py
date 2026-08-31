@@ -73,6 +73,8 @@ FAST_EXIT_CHECK_INTERVAL = 1.0
 # state 文件最小存活时间：新写入的文件在此时长内不会被快速清理删除。
 # 防止 agent 刚回复完（Stop hook 写 state）→ jobName 短暂变回 shell → 被误删。
 MIN_STATE_AGE_SEC = 10
+# state 文件最大存活时间：启动时超过此时长的 state 视为无人认领的化石，直接清理。
+STALE_STATE_MAX_AGE_SEC = 24 * 3600
 
 COLOR_GREEN  = iterm2.Color(CFG["COLOR_GREEN_R"],  CFG["COLOR_GREEN_G"],  CFG["COLOR_GREEN_B"])
 COLOR_YELLOW = iterm2.Color(CFG["COLOR_YELLOW_R"], CFG["COLOR_YELLOW_G"], CFG["COLOR_YELLOW_B"])
@@ -521,6 +523,45 @@ def read_state_files() -> dict[str, dict]:
     return result
 
 
+def purge_stale_state_files() -> int:
+    """启动时清理超过 STALE_STATE_MAX_AGE_SEC 的 state 文件，返回清理数量。
+
+    daemon 假死或长时间未运行时，state 会堆积成无人认领的化石文件。
+    iTerm2 session id 不跨重启复用，这些文件永远不会再被匹配上。
+    """
+    if not IDLE_STATE_DIR.exists():
+        return 0
+
+    now = time.time()
+    removed = 0
+    for f in IDLE_STATE_DIR.glob("*.json"):
+        try:
+            state = json.loads(f.read_text())
+            idle_since = state.get("idle_since")
+        except (json.JSONDecodeError, OSError):
+            idle_since = None
+
+        if not isinstance(idle_since, (int, float)):
+            try:
+                idle_since = f.stat().st_mtime
+            except OSError:
+                continue
+
+        age = now - idle_since
+        if age < STALE_STATE_MAX_AGE_SEC:
+            continue
+        try:
+            f.unlink()
+            removed += 1
+        except OSError:
+            pass
+
+    if removed:
+        log(f"启动清理: 删除 {removed} 个陈旧 state 文件"
+            f"（超过 {STALE_STATE_MAX_AGE_SEC / 3600:.0f}h）")
+    return removed
+
+
 def update_stage_file(path: str, state: dict, stage: str):
     state["color_stage"] = stage
     try:
@@ -598,6 +639,9 @@ async def watch_idle_dir(connection):
     known: dict[str, dict] = {}
     applied_colors: dict = {}
     last_exit_check = 0.0
+
+    # 启动清理：丢弃陈旧化石文件，避免假死期间堆积的 state 参与恢复
+    purge_stale_state_files()
 
     # 启动恢复：对所有已有文件按当前空闲时长设色
     now = time.time()
@@ -806,9 +850,27 @@ async def color_poller(connection):
 # ------------------------------------------------------------------ #
 
 async def main(connection):
-    asyncio.create_task(watch_idle_dir(connection))
-    asyncio.create_task(color_poller(connection))
-    await asyncio.Event().wait()
+    """任一循环退出即整体退出，交给 run_forever/launchd 重启。
+
+    历史 bug：这里曾 `await asyncio.Event().wait()`，两个 task 因连接断开
+    return 后 main 仍然挂着，进程活着但不做任何事 —— launchd 看到进程在跑
+    不重启，run_forever 也不知道该重连，功能静默全废。
+    """
+    watch = asyncio.create_task(watch_idle_dir(connection))
+    poll = asyncio.create_task(color_poller(connection))
+
+    done, pending = await asyncio.wait(
+        {watch, poll}, return_when=asyncio.FIRST_COMPLETED
+    )
+
+    for task in pending:
+        task.cancel()
+    if pending:
+        await asyncio.wait(pending)
+
+    log("循环已退出，daemon 结束等待重启")
+    for task in done:
+        task.result()  # 有异常就抛出去，不吞
 
 
 def run_daemon():
