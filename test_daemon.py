@@ -1282,6 +1282,112 @@ class TestHeartbeat(unittest.TestCase):
 
 
 # ================================================================== #
+#  hook 哨兵 — daemon 失联时告警（检测者必须在 daemon 之外）
+# ================================================================== #
+
+class TestHookDaemonSilenceAlert(unittest.TestCase):
+    """daemon 假死时它无法自检；hook 每次 Stop 都跑，由它当哨兵。"""
+
+    PLIST_REL = "Library/LaunchAgents/io.github.hanzhangzzz.iterm2-ai-tab-color.plist"
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.home = Path(self.tmpdir) / "home"
+        (self.home / "Library" / "LaunchAgents").mkdir(parents=True)
+        self.state_dir = self.home / ".iterm2-ai-tab-color" / "state"
+        self.state_dir.mkdir(parents=True)
+        self.hook = PROJECT_DIR / "iterm2_ai_tab_color_hook.sh"
+        self.stamp = self.state_dir / ".heartbeat_alert_at"
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def _install_plist(self):
+        (self.home / self.PLIST_REL).write_text("<plist/>")
+
+    def _write_log(self, age_seconds: float):
+        log = self.state_dir / "daemon.log"
+        log.write_text("[iterm2-ai-tab-color] 心跳: watch 存活，跟踪 0 个 state\n")
+        mtime = time.time() - age_seconds
+        os.utime(log, (mtime, mtime))
+        return log
+
+    def _run_stop_hook(self, session="alert-session"):
+        env = os.environ.copy()
+        env.update({"HOME": str(self.home), "ITERM_SESSION_ID": "w0t0p0:UUID-ALERT"})
+        env.pop("TMUX", None)
+        return subprocess.run(
+            ["bash", str(self.hook), "--agent", "claude"],
+            input=json.dumps({"hook_event_name": "Stop", "session_id": session}),
+            text=True, capture_output=True, env=env,
+            cwd=str(PROJECT_DIR), timeout=10,
+        )
+
+    def test_alerts_when_heartbeat_is_stale(self):
+        self._install_plist()
+        self._write_log(age_seconds=3 * 3600)   # 3h 无心跳
+        result = self._run_stop_hook()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(self.stamp.exists(), "失联却没有告警")
+
+    def test_silent_when_heartbeat_is_fresh(self):
+        self._install_plist()
+        self._write_log(age_seconds=60)
+        result = self._run_stop_hook()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.stamp.exists(), "daemon 健康却误报")
+
+    def test_silent_when_not_installed(self):
+        """没装 plist 说明用户没启用，不该骚扰。"""
+        self._write_log(age_seconds=3 * 3600)
+        result = self._run_stop_hook()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.stamp.exists())
+
+    def test_silent_when_log_missing(self):
+        """刚安装还没生成日志，不是失联。"""
+        self._install_plist()
+        result = self._run_stop_hook()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(self.stamp.exists())
+
+    def test_cooldown_suppresses_repeat_alert(self):
+        self._install_plist()
+        self._write_log(age_seconds=3 * 3600)
+        recent = int(time.time()) - 60
+        self.stamp.write_text(str(recent))
+        self._run_stop_hook()
+        self.assertEqual(self.stamp.read_text(), str(recent), "冷却期内不应重复告警")
+
+    def test_alerts_again_after_cooldown(self):
+        self._install_plist()
+        self._write_log(age_seconds=3 * 3600)
+        stale_alert = int(time.time()) - 3 * 3600
+        self.stamp.write_text(str(stale_alert))
+        self._run_stop_hook()
+        self.assertNotEqual(self.stamp.read_text(), str(stale_alert),
+                            "冷却期过后应重新告警")
+
+    def test_corrupt_stamp_does_not_break_hook(self):
+        self._install_plist()
+        self._write_log(age_seconds=3 * 3600)
+        self.stamp.write_text("not-a-number")
+        result = self._run_stop_hook()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(self.stamp.exists())
+
+    def test_stop_hook_still_writes_state_when_alerting(self):
+        """告警绝不能干扰主流程。"""
+        self._install_plist()
+        self._write_log(age_seconds=3 * 3600)
+        self._run_stop_hook(session="main-flow")
+        state = self.state_dir / "main-flow.json"
+        self.assertTrue(state.exists(), "告警路径破坏了 Stop 主流程")
+        self.assertEqual(json.loads(state.read_text())["color_stage"], "green")
+
+
+# ================================================================== #
 #  运行
 # ================================================================== #
 

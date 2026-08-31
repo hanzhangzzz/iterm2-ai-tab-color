@@ -129,6 +129,45 @@ reset_tab_color() {
     write_escape "$(printf '\033]6;1;bg;*;default\a')"
 }
 
+# ---- daemon 失联告警 ----
+# daemon 每小时打一次心跳，日志 mtime 停滞即视为失联。
+# 检测者必须在 daemon 之外：它死了就没法自检。hook 每次 Stop 都会跑，
+# 而 Stop 正是用户即将依赖 tab 颜色的时刻。
+HEARTBEAT_STALE_SEC=7200
+ALERT_COOLDOWN_SEC=1800
+
+notify() {
+    write_escape "$(printf '\033]9;%s\a' "$1")"
+}
+
+warn_if_daemon_silent() {
+    local plist="$HOME/Library/LaunchAgents/io.github.hanzhangzzz.iterm2-ai-tab-color.plist"
+    local log_file="$IDLE_STATE_DIR/daemon.log"
+    local stamp="$IDLE_STATE_DIR/.heartbeat_alert_at"
+
+    # 没装就不骚扰；日志还没生成说明刚装未启动，交给安装流程
+    [ -f "$plist" ] || return 0
+    [ -f "$log_file" ] || return 0
+
+    local now last_beat
+    now=$(date +%s)
+    last_beat=$(stat -f %m "$log_file" 2>/dev/null) || return 0
+    [ $((now - last_beat)) -ge "$HEARTBEAT_STALE_SEC" ] || return 0
+
+    # 限流：冷却期内不重复弹
+    if [ -f "$stamp" ]; then
+        local last_alert
+        last_alert=$(cat "$stamp" 2>/dev/null) || last_alert=0
+        case "$last_alert" in
+            ''|*[!0-9]*) last_alert=0 ;;
+        esac
+        [ $((now - last_alert)) -ge "$ALERT_COOLDOWN_SEC" ] || return 0
+    fi
+
+    printf '%s' "$now" > "$stamp" 2>/dev/null
+    notify "iTerm2 AI Tab Color: daemon 已失联 $(( (now - last_beat) / 3600 ))h+，tab 颜色可能不再更新"
+}
+
 has_other_idle_state_in_tab() {
     IDLE_STATE_DIR="$IDLE_STATE_DIR" ITERM_SESSION_ID="$ITERM_SESSION_ID" python3 - <<'PY' 2>/dev/null
 import json
@@ -219,6 +258,8 @@ if "$AGENT" == "claude":
 with open("$STATE_FILE", "w") as f:
     json.dump(data, f)
 EOF
+
+    warn_if_daemon_silent
 
 # ---- 用户继续操作 → 重置颜色 + 清除时间戳 ----
 elif [ "$HOOK_EVENT" = "PreToolUse" ] || [ "$HOOK_EVENT" = "UserPromptSubmit" ]; then
