@@ -101,6 +101,13 @@ JSON
 test -f "$TEST_HOME/.iterm2-ai-tab-color/state/e2e-session.json"
 test "$(stat -f '%Lp' "$TEST_HOME/.iterm2-ai-tab-color/state/e2e-session.json")" = "600"
 
+# 不在 iTerm2 pane 里（无 ITERM_SESSION_ID）时 Stop 不得写 state：daemon 无法消费空 session，只会永久残留。
+HOME="$TEST_HOME" ITERM_SESSION_ID="" \
+  "$TEST_HOME/.claude/hooks/iterm2_ai_tab_color_hook.sh" <<'JSON'
+{"hook_event_name":"Stop","session_id":"e2e-no-iterm"}
+JSON
+test ! -e "$TEST_HOME/.iterm2-ai-tab-color/state/e2e-no-iterm.json"
+
 TEST_HOME="$TEST_HOME" python3 - <<'PY'
 import json
 import os

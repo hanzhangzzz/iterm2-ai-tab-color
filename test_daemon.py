@@ -1187,7 +1187,17 @@ class TestMainExitsWithLoops(unittest.TestCase):
              patch.object(daemon, "color_poller", poll_impl):
             return asyncio.run(daemon.main(MagicMock()))
 
-    def test_returns_when_watch_loop_exits(self):
+    def _assert_exits_process(self, watch_impl, poll_impl):
+        """main 必须以 SystemExit(1) 结束进程，而不是普通 return。
+
+        普通 return 后 iterm2.run_forever 会 await dispatch 任务；若循环是因
+        误判退出而 websocket 仍活着，进程会再次假死。
+        """
+        with self.assertRaises(SystemExit) as ctx:
+            self._run_main(watch_impl, poll_impl)
+        self.assertEqual(ctx.exception.code, 1)
+
+    def test_exits_process_when_watch_loop_exits(self):
         async def watch(connection):
             return None
 
@@ -1195,16 +1205,16 @@ class TestMainExitsWithLoops(unittest.TestCase):
             await asyncio.sleep(3600)
 
         # 不挂起即为通过；超时会让测试卡死
-        self._run_main(watch, poll)
+        self._assert_exits_process(watch, poll)
 
-    def test_returns_when_poller_exits(self):
+    def test_exits_process_when_poller_exits(self):
         async def watch(connection):
             await asyncio.sleep(3600)
 
         async def poll(connection):
             return None
 
-        self._run_main(watch, poll)
+        self._assert_exits_process(watch, poll)
 
     def test_cancels_the_surviving_loop(self):
         cancelled = {"watch": False}
@@ -1219,7 +1229,7 @@ class TestMainExitsWithLoops(unittest.TestCase):
         async def poll(connection):
             return None
 
-        self._run_main(watch, poll)
+        self._assert_exits_process(watch, poll)
         self.assertTrue(cancelled["watch"])
 
     def test_propagates_loop_exception(self):

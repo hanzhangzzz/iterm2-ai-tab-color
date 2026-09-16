@@ -883,6 +883,12 @@ async def main(connection):
     for task in done:
         task.result()  # 有异常就抛出去，不吞
 
+    # 必须主动结束进程，不能只 return：iterm2.run_forever 在 main 返回后会
+    # `await dispatch_forever_task`。循环若因误判（异常文本恰好含 "close"/
+    # "connection"，如 "I/O operation on closed file"）而退出，此时 websocket
+    # 仍活着，dispatch 永不结束，进程再次假死。退出交给 launchd KeepAlive 重启。
+    raise SystemExit(1)
+
 
 def run_daemon():
     iterm2.run_forever(main, retry=True)

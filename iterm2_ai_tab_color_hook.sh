@@ -239,6 +239,10 @@ fi
 if [ "$HOOK_EVENT" = "Stop" ]; then
     set_tab_color "$COLOR_GREEN_R" "$COLOR_GREEN_G" "$COLOR_GREEN_B"
 
+    # 没有 ITERM_SESSION_ID（agent 不在 iTerm2 pane 里）时只刷 tty 颜色，不写 state：
+    # daemon 所有路径都按 iterm2_session 定位 tab，空 session 的 state 永远不会被消费或清理。
+    [ -n "$ITERM_SESSION_ID" ] || exit 0
+
     mkdir -p "$IDLE_STATE_DIR"
     TIMESTAMP=$(date +%s)
     STATE_FILE="$IDLE_STATE_DIR/${STATE_BASENAME}.json"
