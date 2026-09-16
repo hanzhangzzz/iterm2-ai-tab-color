@@ -23,11 +23,11 @@ iTerm2 ships a [Claude Code integration](https://iterm2.com/claude-code-integrat
 
 | | iTerm2 built-in integration | Alert plugins ([cc-iterm2-tab-alert](https://github.com/STRML/cc-iterm2-tab-alert), [tab-status](https://github.com/JasperSui/claude-code-iterm2-tab-status)) | iTerm2 AI Tab Color |
 |---|---|---|---|
-| Where it shows | Dot and subtitle on the tab | Tab title emoji, or a flash on permission prompts | Whole tab background color |
+| Where it shows | Dot and subtitle on the tab | Tab title emoji; tab flashes orange when input is needed | Whole tab background color, kept until you return |
 | Escalates with waiting time | No | No | Green → yellow → red |
 | OpenAI Codex CLI | No, Claude Code only | No | Yes, same hook and daemon |
 | Split panes in one tab | Per session | Per session | Aggregated: the tab shows its most urgent pane |
-| Currently focused tab | Shows status | Shows status | Always white |
+| Currently focused tab | Shows status | Alert clears on focus | Always white |
 | Runs as | Built into iTerm2 | Claude Code plugin | Hooks + one LaunchAgent daemon |
 
 Comparison reflects the projects' documentation as of September 2026.

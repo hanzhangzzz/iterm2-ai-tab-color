@@ -23,11 +23,11 @@ iTerm2 自带的 [Claude Code 集成](https://iterm2.com/claude-code-integration
 
 | | iTerm2 内置集成 | 提醒类插件（[cc-iterm2-tab-alert](https://github.com/STRML/cc-iterm2-tab-alert)、[tab-status](https://github.com/JasperSui/claude-code-iterm2-tab-status)） | iTerm2 AI Tab Color |
 |---|---|---|---|
-| 显示位置 | tab 上的状态点和副标题 | tab 标题 emoji，或权限请求时闪烁 | 整个 tab 背景色 |
+| 显示位置 | tab 上的状态点和副标题 | tab 标题 emoji；需要输入时 tab 闪橙色 | 整个 tab 背景色，保持到你回来为止 |
 | 随等待时长升级 | 否 | 否 | 绿 → 黄 → 红 |
 | OpenAI Codex CLI | 否，仅 Claude Code | 否 | 支持，同一套 hook 和 daemon |
 | 同 tab 多 pane | 按 session 各自显示 | 按 session 各自显示 | 聚合，tab 显示最紧急的 pane |
-| 当前活跃 tab | 显示状态 | 显示状态 | 始终白色 |
+| 当前活跃 tab | 显示状态 | 聚焦即清除提醒 | 始终白色 |
 | 运行形态 | iTerm2 内置 | Claude Code 插件 | hook + 一个 LaunchAgent daemon |
 
 对比基于各项目 2026 年 9 月的文档。

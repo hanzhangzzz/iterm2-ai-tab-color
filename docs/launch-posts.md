@@ -7,7 +7,7 @@
 **Title**（≤ 80 字符）
 
 ```
-Show HN: Color iTerm2 tabs by how long your Claude Code/Codex sessions have waited
+Show HN: Color iTerm2 tabs by how long Claude Code/Codex sessions have waited
 ```
 
 **URL**
@@ -23,9 +23,9 @@ I run 3–6 Claude Code and Codex sessions in parallel in iTerm2. The terminal w
 
 So: hooks on Stop / PreToolUse / UserPromptSubmit write a tiny local state file, and one LaunchAgent daemon talks to the iTerm2 Python API. Inactive tabs go green when the agent finishes, yellow after 10 min, red after 20. The tab you are looking at stays white, so every colored tab is an unread badge. Split panes in one tab aggregate to the most urgent pane.
 
-iTerm2 recently shipped a built-in Claude Code integration (status dot + subtitle). It answers "what state is this session in"; this answers "which tab do I go to next", and it also covers OpenAI Codex CLI. They coexist fine.
+iTerm2 has a built-in Claude Code integration (status dot + subtitle per session). It answers "what state is this session in"; this answers "which tab do I go to next", and it also covers OpenAI Codex CLI. They coexist fine.
 
-Everything stays local: no network, no telemetry, MIT. macOS + iTerm2 + Python 3.10.
+Everything stays local: no network, no telemetry, MIT. macOS + iTerm2 + Python 3.10+.
 
 Bugs I hit building it that might interest people: the iterm2 Python package's run_forever awaits your main coroutine forever, so if main never returns after the websocket drops, the process sits alive doing nothing and launchd KeepAlive never restarts it. Silent failure for six days on my own machine before I noticed all tabs were stuck green.
 ```
@@ -43,7 +43,7 @@ I made my iTerm2 tabs turn green → yellow → red by how long each Claude Code
 ```
 When I run several Claude Code and Codex sessions side by side, I kept losing track of which ones had finished and were sitting idle. Notifications vanish; tab colors don't.
 
-[demo gif]
+（附 assets/demo.gif）
 
 What it does:
 - Tab turns green when the agent finishes, yellow after 10 min, red after 20 min (thresholds configurable)
@@ -52,7 +52,7 @@ What it does:
 - Works with Claude Code and OpenAI Codex CLI through the same hooks
 - 100% local: hooks + one small LaunchAgent daemon using the iTerm2 Python API. No network, no telemetry.
 
-Different from the new built-in iTerm2 Claude Code integration: that one shows a status dot per session; this one colors the whole tab and escalates with waiting time.
+Different from the built-in iTerm2 Claude Code integration: that one shows a status dot per session; this one colors the whole tab and escalates with waiting time.
 
 macOS + iTerm2 only. MIT.
 
@@ -62,13 +62,13 @@ https://github.com/hanzhangzzz/iterm2-ai-tab-color
 ## X
 
 ```
-My iTerm2 tabs now tell me how long each Claude Code / Codex session has been waiting for me.
+My iTerm2 tabs now show how long each Claude Code / Codex session has been waiting for me.
 
 Green: just finished
 Yellow: 10 min
-Red: 20 min, you forgot about it
+Red: 20 min, you forgot it
 
-Whole-tab color, split panes aggregated, current tab stays white. Local only, MIT.
+Whole-tab color, split panes aggregated, current tab stays white. Local, MIT.
 
 https://github.com/hanzhangzzz/iterm2-ai-tab-color
 ```
