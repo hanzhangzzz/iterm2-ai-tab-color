@@ -1,12 +1,12 @@
 # iTerm2 AI Tab Color
 
-**不用逐个打开 iTerm2 tab，也能看出哪个 Claude Code 或 Codex session 正在等你。**
+**按 Claude Code 或 OpenAI Codex session 等你等了多久，给整个 iTerm2 tab 上色。**
 
 [English](README.md)
 
 ![AI session 等待时，iTerm2 tab 从绿色逐渐变为黄色和红色](assets/demo.gif)
 
-并行运行多个 AI 编程 Agent 后，真正的瓶颈往往变成了人的注意力。iTerm2 AI Tab Color 把非活跃 tab 变成一条持续可见的处理队列：
+并行跑多个 AI 编程 Agent 之后，瓶颈不再是终端，而是人的注意力。通知只能告诉你"有个 Agent 结束了"。这个工具直接在 tab 上告诉你"哪几个 tab 在等、各等了多久"，并且一直显示到你回去处理为止。
 
 | 颜色 | 含义 |
 |---|---|
@@ -15,11 +15,22 @@
 | 红色 | session 已等待超过 20 分钟 |
 | 白色 | 当前 tab、正在处理，或没有等待中的 session |
 
-只有非活跃 tab 会被上色，当前正在查看的 tab 始终保持白色。同一个 tab 有多个 pane 时取最紧急的颜色，因此一个等待过久的红色 pane 不会被另一个活跃 pane 掩盖。
+只有非活跃 tab 会被上色，当前正在看的 tab 始终白色，所以每个有颜色的 tab 都是一条"未读"。同一个 tab 有多个 pane 时取最紧急的颜色，等待过久的红色 pane 不会被另一个活跃 pane 盖住。
 
-## 为什么需要它
+## 为什么不用 iTerm2 内置集成
 
-Claude Code 和 Codex 的 hook 可以知道 Agent 何时结束，但普通通知很快就会消失。Tab 颜色会一直保留，直到你回到对应工作。这样无需新增常驻界面、云服务或账号，iTerm2 本身就是注意力面板。
+iTerm2 自带的 [Claude Code 集成](https://iterm2.com/claude-code-integration.html)会在每个 session 的 tab 上显示状态点和副标题，回答的是"这个 session 处于什么状态"。本工具回答的是"下一个该去哪个 tab"。两者可以同时开。
+
+| | iTerm2 内置集成 | 提醒类插件（[cc-iterm2-tab-alert](https://github.com/STRML/cc-iterm2-tab-alert)、[tab-status](https://github.com/JasperSui/claude-code-iterm2-tab-status)） | iTerm2 AI Tab Color |
+|---|---|---|---|
+| 显示位置 | tab 上的状态点和副标题 | tab 标题 emoji；需要输入时 tab 闪橙色 | 整个 tab 背景色，保持到你回来为止 |
+| 随等待时长升级 | 否 | 否 | 绿 → 黄 → 红 |
+| OpenAI Codex CLI | 否，仅 Claude Code | 否 | 支持，同一套 hook 和 daemon |
+| 同 tab 多 pane | 按 session 各自显示 | 按 session 各自显示 | 聚合，tab 显示最紧急的 pane |
+| 当前活跃 tab | 显示状态 | 聚焦即清除提醒 | 始终白色 |
+| 运行形态 | iTerm2 内置 | Claude Code 插件 | hook + 一个 LaunchAgent daemon |
+
+对比基于各项目 2026 年 9 月的文档。
 
 ## 特性
 
