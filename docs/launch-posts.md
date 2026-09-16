@@ -114,3 +114,4 @@ https://github.com/hanzhangzzz/iterm2-ai-tab-color
 
 | 渠道 | 日期 | 链接 |
 |---|---|---|
+| X | 2026-09-16 | https://x.com/du_ethan3954/status/2100230948214194490 |
