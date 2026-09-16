@@ -73,7 +73,7 @@ Whole-tab color, split panes aggregated, current tab stays white. Local, MIT.
 https://github.com/hanzhangzzz/iterm2-ai-tab-color
 ```
 
-附 `assets/demo.gif`。
+附 `assets/demo.gif`。X 把链接按 23 字符计，本文有效长度 258/280。
 
 ## V2EX（分享创造）
 
