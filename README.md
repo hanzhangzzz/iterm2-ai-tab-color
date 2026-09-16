@@ -1,12 +1,12 @@
 # iTerm2 AI Tab Color
 
-**See which Claude Code or OpenAI Codex session needs you—without opening every iTerm2 tab.**
+**Color the whole iTerm2 tab by how long a Claude Code or OpenAI Codex session has been waiting for you.**
 
 [中文说明](README.zh-CN.md)
 
 ![iTerm2 tabs changing from green to yellow to red as AI sessions wait](assets/demo.gif)
 
-When several AI coding agents run in parallel, the terminal stops being the bottleneck—your attention does. iTerm2 AI Tab Color turns inactive tabs into a visual queue:
+Run several AI coding agents in parallel and the bottleneck stops being the terminal. It becomes your attention. A notification tells you *that* an agent finished. This tool tells you *which* tabs are waiting and *how long* they have been waiting, on the tab itself, until you come back.
 
 | Color | Meaning |
 |---|---|
@@ -15,11 +15,22 @@ When several AI coding agents run in parallel, the terminal stops being the bott
 | Red | The session has waited longer than 20 minutes |
 | White | The tab is active, processing, or has no waiting session |
 
-Only inactive tabs are colored. The tab you are currently viewing stays white. Multiple panes in one tab share the most urgent color, so a red waiting pane cannot be hidden by another active pane.
+Only inactive tabs are colored. The tab you are looking at stays white, so every colored tab is an unread badge. Multiple panes in one tab share the most urgent color, so a red waiting pane cannot be hidden behind an active one.
 
-## Why this exists
+## Why not the built-in iTerm2 integration?
 
-Claude Code and Codex hooks can tell when an agent finishes, but a notification disappears quickly. Tab color remains visible until you return to the work. This makes iTerm2 itself a persistent attention dashboard—without another app, cloud service, or account.
+iTerm2 ships a [Claude Code integration](https://iterm2.com/claude-code-integration.html) that shows a colored dot and a subtitle per session. It answers "what state is this session in". This tool answers "which tab should I go to next". The two can run side by side.
+
+| | iTerm2 built-in integration | Alert plugins ([cc-iterm2-tab-alert](https://github.com/STRML/cc-iterm2-tab-alert), [tab-status](https://github.com/JasperSui/claude-code-iterm2-tab-status)) | iTerm2 AI Tab Color |
+|---|---|---|---|
+| Where it shows | Dot and subtitle on the tab | Tab title emoji, or a flash on permission prompts | Whole tab background color |
+| Escalates with waiting time | No | No | Green → yellow → red |
+| OpenAI Codex CLI | No, Claude Code only | No | Yes, same hook and daemon |
+| Split panes in one tab | Per session | Per session | Aggregated: the tab shows its most urgent pane |
+| Currently focused tab | Shows status | Shows status | Always white |
+| Runs as | Built into iTerm2 | Claude Code plugin | Hooks + one LaunchAgent daemon |
+
+Comparison reflects the projects' documentation as of September 2026.
 
 ## Features
 
