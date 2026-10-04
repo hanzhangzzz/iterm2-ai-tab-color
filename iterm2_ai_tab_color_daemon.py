@@ -866,7 +866,7 @@ async def color_poller(connection):
             if idle_count != last_nudge_count and 0 < idle_count < CONCURRENT_TARGET:
                 log(f"提示：当前 {idle_count} 个 tab 等待中，"
                     f"目标并发 {CONCURRENT_TARGET}，可以多开任务 💪")
-                last_nudge_count = idle_count
+            last_nudge_count = idle_count
 
         except Exception as e:
             log(f"poll 出错: {e}")
