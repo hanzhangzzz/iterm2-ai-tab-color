@@ -126,7 +126,7 @@ claude_commands = [
 assert "/tmp/unrelated-hook" in claude_commands
 assert "/opt/other/iterm2_ai_tab_color_hook.sh" in claude_commands
 
-for config, expected in ((claude, 4), (codex, 3)):
+for config, expected in ((claude, 5), (codex, 3)):
     commands = [
         hook.get("command", "")
         for groups in config.get("hooks", {}).values()

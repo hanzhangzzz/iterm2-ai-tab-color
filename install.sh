@@ -65,7 +65,7 @@ iTerm2 AI Tab Color 安装器
   3. 安装稳定运行时到 $APP_DIR
   4. 生成 launchd plist: $PLIST_LINK
   5. 注册并启动 launchd daemon
-  6. 注册 Claude hooks: Stop, PreToolUse
+  6. 注册 Claude hooks: Stop, PreToolUse, UserPromptSubmit
   7. 注册 Codex hooks: Stop, PreToolUse, UserPromptSubmit
 EOF
 }
@@ -361,7 +361,8 @@ else:
     cfg = {}
 
 hooks = cfg.setdefault("hooks", {})
-events = ["Stop", "PreToolUse"]
+# UserPromptSubmit 让用户一发消息就重置颜色，不等第一个工具调用
+events = ["Stop", "PreToolUse", "UserPromptSubmit"]
 changed = False
 for event_name in events:
     hooks.setdefault(event_name, [])
@@ -386,8 +387,8 @@ def ensure_hook(event_name, matcher, command):
     else:
         print(f"已存在: {event_name}/{matcher}")
 
-ensure_hook("Stop", "*", hook_command)
-ensure_hook("PreToolUse", "*", hook_command)
+for event_name in events:
+    ensure_hook(event_name, "*", hook_command)
 
 if changed:
     if dry_run:

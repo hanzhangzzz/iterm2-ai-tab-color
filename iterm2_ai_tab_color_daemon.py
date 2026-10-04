@@ -586,6 +586,9 @@ async def prune_finished_state_files(connection, states: dict[str, dict], *, app
     remaining = dict(states)
 
     now = time.time()
+    # 同一 pane 可能积累多个 session 的 state（router 反复起 session），
+    # 按 pane 聚合判定一次、批量删除，避免同秒 N 行重复日志。
+    batches: dict[str, dict] = {}
     for path, state in list(states.items()):
         sid = state.get("iterm2_session", "")
         if not sid:
@@ -598,6 +601,10 @@ async def prune_finished_state_files(connection, states: dict[str, dict], *, app
             continue
 
         uuid = extract_uuid(sid)
+        if uuid in batches:
+            batches[uuid]["paths"].append(path)
+            continue
+
         session = app.get_session_by_id(uuid)
         reason = ""
 
@@ -618,12 +625,18 @@ async def prune_finished_state_files(connection, states: dict[str, dict], *, app
         if not reason:
             continue
 
-        log(f"快速清理: {uuid[:8]}… {reason}")
-        try:
-            Path(path).unlink()
-        except OSError:
-            pass
-        remaining.pop(path, None)
+        batches[uuid] = {"reason": reason, "paths": [path]}
+
+    for uuid, batch in batches.items():
+        count = len(batch["paths"])
+        suffix = f"（{count} 个 state）" if count > 1 else ""
+        log(f"快速清理: {uuid[:8]}… {batch['reason']}{suffix}")
+        for path in batch["paths"]:
+            try:
+                Path(path).unlink()
+            except OSError:
+                pass
+            remaining.pop(path, None)
 
     return remaining
 
@@ -684,14 +697,17 @@ async def watch_idle_dir(connection):
                 await reset_untracked_tab_colors(connection, current, app=app)
                 last_exit_check = now
 
-            # 消失的文件 → 记住 session 以便重置
-            disappeared = []
+            # 消失的文件 → 记住 session 以便重置；同 pane 多个 state 聚合成一条日志
+            gone_counts: dict[str, int] = {}
             for path, state in known.items():
                 if path not in current:
                     sid = state.get("iterm2_session", "")
                     if sid:
-                        log(f"session {extract_uuid(sid)[:8]}… 恢复活跃 → 重置颜色")
-                        disappeared.append(sid)
+                        gone_counts[sid] = gone_counts.get(sid, 0) + 1
+            for sid, count in gone_counts.items():
+                suffix = f"（{count} 个 state）" if count > 1 else ""
+                log(f"session {extract_uuid(sid)[:8]}… 恢复活跃 → 重置颜色{suffix}")
+            disappeared = list(gone_counts)
 
             invalidate_color_cache_on_state_change(known, current, applied_colors)
             known = current
@@ -795,6 +811,7 @@ async def color_poller(connection):
         f"轮询间隔={POLL_INTERVAL}s  "
         f"黄色阈值={CFG['THRESHOLD_YELLOW']}min  红色阈值={CFG['THRESHOLD_RED']}min")
 
+    last_nudge_count = None
     while True:
         await asyncio.sleep(POLL_INTERVAL)
         try:
@@ -845,9 +862,11 @@ async def color_poller(connection):
                 if (prefix := extract_tab_prefix(state.get("iterm2_session", "")))
             }
             idle_count = len(idle_tabs) or len(states)
-            if 0 < idle_count < CONCURRENT_TARGET:
+            # 只在等待数变化时提示，避免每 30s 重复刷屏撑大日志
+            if idle_count != last_nudge_count and 0 < idle_count < CONCURRENT_TARGET:
                 log(f"提示：当前 {idle_count} 个 tab 等待中，"
                     f"目标并发 {CONCURRENT_TARGET}，可以多开任务 💪")
+                last_nudge_count = idle_count
 
         except Exception as e:
             log(f"poll 出错: {e}")
