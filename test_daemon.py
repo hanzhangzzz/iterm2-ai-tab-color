@@ -914,6 +914,37 @@ class TestPollerDecisionLogic(unittest.TestCase):
         import shutil
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
+    def test_nudge_tracks_counts_outside_prompt_range(self):
+        """连续相同等待数静默，经过零或并发目标后再次提示。"""
+        for counts in ((1, 1, 0, 1, 1), (1, daemon.CONCURRENT_TARGET, 1)):
+            with self.subTest(counts=counts):
+                snapshots = []
+                for count in counts:
+                    snapshots.append({
+                        f"unused-{index}.json": {
+                            "iterm2_session": f"w0t{index}p0:UUID-{index}",
+                            "idle_since": time.time(),
+                            "color_stage": "green",
+                        }
+                        for index in range(count)
+                    })
+                steps = iter(counts)
+
+                async def next_cycle(_):
+                    if next(steps, None) is None:
+                        raise asyncio.CancelledError()
+
+                with patch.object(daemon.asyncio, "sleep", next_cycle), \
+                     patch.object(daemon, "read_state_files", side_effect=snapshots), \
+                     patch.object(daemon, "is_agent_running", AsyncMock(return_value=True)), \
+                     patch.object(daemon, "log") as log:
+                    with self.assertRaises(asyncio.CancelledError):
+                        asyncio.run(daemon.color_poller(self.mock_conn))
+
+                nudges = [entry.args[0] for entry in log.call_args_list
+                          if entry.args[0].startswith("提示：")]
+                self.assertEqual(len(nudges), 2)
+
     def _write_state(self, session_id, idle_since, stage="green"):
         path = Path(self.tmpdir) / f"{session_id}.json"
         data = {
